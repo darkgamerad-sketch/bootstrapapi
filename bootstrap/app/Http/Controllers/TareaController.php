@@ -13,8 +13,11 @@ class TareaController extends Controller
      */
     public function index()
     {
-        // Excluir tareas eliminadas (soft deleted)
-        $tareas = Tarea::whereNull('deleted_at')->get();
+        // Excluir tareas eliminadas (soft deleted) con PAGINACIÓN - ORDEN ASCENDENTE
+        $tareas = Tarea::whereNull('deleted_at')
+                       ->orderBy('id', 'asc') // ← CAMBIADO A 'asc' PARA ID 1, 2, 3...
+                       ->paginate(5); // 5 tareas por página
+
         return view('tareas.index', compact('tareas'));
     }
 
@@ -95,11 +98,18 @@ class TareaController extends Controller
 
     // ========== MÉTODOS API ==========
 
-    public function indexApi()
+    public function indexApi(Request $request)
     {
-        $tareas = Tarea::whereNull('deleted_at')->get();
+        // Obtener parámetros de paginación
+        $perPage = $request->get('per_page', 5);
+        $page = $request->get('page', 1);
 
-        // Formatear las tareas manualmente
+        // Paginar tareas excluyendo eliminadas - ORDEN ASCENDENTE
+        $tareas = Tarea::whereNull('deleted_at')
+                       ->orderBy('id', 'asc') // ← MANTENIDO COMO 'asc' PARA ID 1, 2, 3...
+                       ->paginate($perPage, ['*'], 'page', $page);
+
+        // Resto del código igual...
         $tareasFormateadas = $tareas->map(function ($tarea) {
             return [
                 'id' => $tarea->id,
@@ -116,7 +126,23 @@ class TareaController extends Controller
             ];
         });
 
-        return response()->json($tareasFormateadas);
+        return response()->json([
+            'data' => $tareasFormateadas,
+            'pagination' => [
+                'current_page' => $tareas->currentPage(),
+                'per_page' => $tareas->perPage(),
+                'total' => $tareas->total(),
+                'last_page' => $tareas->lastPage(),
+                'from' => $tareas->firstItem(),
+                'to' => $tareas->lastItem(),
+                'links' => [
+                    'first' => $tareas->url(1),
+                    'last' => $tareas->url($tareas->lastPage()),
+                    'prev' => $tareas->previousPageUrl(),
+                    'next' => $tareas->nextPageUrl(),
+                ]
+            ]
+        ]);
     }
 
     /**
@@ -152,63 +178,108 @@ class TareaController extends Controller
     /**
      * Display the specified resource for API.
      */
-    public function showApi(Tarea $tarea)
+    public function showApi($id) // CAMBIADO: De Tarea $tarea a $id
     {
-        return response()->json([
-            'id' => $tarea->id,
-            'nombre' => $tarea->nombre,
-            'descripcion' => $tarea->descripcion,
-            'finalizada' => (bool)$tarea->finalizada,
-            'fecha_limite' => $tarea->fecha_limite->toISOString(),
-            'fecha_limite_formatted' => $tarea->fecha_limite->format('d/m/Y H:i'),
-            'urgencia' => $tarea->urgencia,
-            'urgencia_texto' => $tarea->urgencia_texto,
-            'urgencia_clase' => $tarea->urgencia_clase,
-            'created_at' => $tarea->created_at->toISOString(),
-            'updated_at' => $tarea->updated_at->toISOString(),
-        ]);
+        try {
+            // Buscar la tarea específica
+            $tarea = Tarea::whereNull('deleted_at')->find($id);
+
+            if (!$tarea) {
+                return response()->json([
+                    'error' => 'Tarea no encontrada'
+                ], 404);
+            }
+
+            return response()->json([
+                'id' => $tarea->id,
+                'nombre' => $tarea->nombre,
+                'descripcion' => $tarea->descripcion,
+                'finalizada' => (bool)$tarea->finalizada,
+                'fecha_limite' => $tarea->fecha_limite->toISOString(),
+                'fecha_limite_formatted' => $tarea->fecha_limite->format('d/m/Y H:i'),
+                'urgencia' => $tarea->urgencia,
+                'urgencia_texto' => $tarea->urgencia_texto,
+                'urgencia_clase' => $tarea->urgencia_clase,
+                'created_at' => $tarea->created_at->toISOString(),
+                'updated_at' => $tarea->updated_at->toISOString(),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error interno del servidor'
+            ], 500);
+        }
     }
 
     /**
      * Update the specified resource in storage for API.
      */
-    public function updateApi(Request $request, Tarea $tarea)
+    public function updateApi(Request $request, $id) // CAMBIADO: De Tarea $tarea a $id
     {
-        $validated = $request->validate([
-            'nombre' => 'required|string|max:60',
-            'descripcion' => 'nullable|string',
-            'fecha_limite' => 'required|date',
-            'urgencia' => 'required|integer|in:0,1,2',
-            'finalizada' => 'sometimes|boolean'
-        ]);
+        try {
+            $tarea = Tarea::whereNull('deleted_at')->find($id);
 
-        $tarea->update($validated);
+            if (!$tarea) {
+                return response()->json([
+                    'error' => 'Tarea no encontrada'
+                ], 404);
+            }
 
-        // Devolver la tarea actualizada formateada
-        return response()->json([
-            'id' => $tarea->id,
-            'nombre' => $tarea->nombre,
-            'descripcion' => $tarea->descripcion,
-            'finalizada' => (bool)$tarea->finalizada,
-            'fecha_limite' => $tarea->fecha_limite->toISOString(),
-            'fecha_limite_formatted' => $tarea->fecha_limite->format('d/m/Y H:i'),
-            'urgencia' => $tarea->urgencia,
-            'urgencia_texto' => $tarea->urgencia_texto,
-            'urgencia_clase' => $tarea->urgencia_clase,
-            'created_at' => $tarea->created_at->toISOString(),
-            'updated_at' => $tarea->updated_at->toISOString(),
-        ]);
+            $validated = $request->validate([
+                'nombre' => 'required|string|max:60',
+                'descripcion' => 'nullable|string',
+                'fecha_limite' => 'required|date',
+                'urgencia' => 'required|integer|in:0,1,2',
+                'finalizada' => 'sometimes|boolean'
+            ]);
+
+            $tarea->update($validated);
+
+            return response()->json([
+                'id' => $tarea->id,
+                'nombre' => $tarea->nombre,
+                'descripcion' => $tarea->descripcion,
+                'finalizada' => (bool)$tarea->finalizada,
+                'fecha_limite' => $tarea->fecha_limite->toISOString(),
+                'fecha_limite_formatted' => $tarea->fecha_limite->format('d/m/Y H:i'),
+                'urgencia' => $tarea->urgencia,
+                'urgencia_texto' => $tarea->urgencia_texto,
+                'urgencia_clase' => $tarea->urgencia_clase,
+                'created_at' => $tarea->created_at->toISOString(),
+                'updated_at' => $tarea->updated_at->toISOString(),
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al actualizar la tarea'
+            ], 500);
+        }
     }
 
     /**
      * Remove the specified resource from storage for API.
      */
-    public function destroyApi(Tarea $tarea)
+    public function destroyApi($id) // CAMBIADO: De Tarea $tarea a $id
     {
-        $tarea->delete();
+        try {
+            $tarea = Tarea::whereNull('deleted_at')->find($id);
 
-        return response()->json([
-            'message' => 'Tarea eliminada exitosamente'
-        ]);
+            if (!$tarea) {
+                return response()->json([
+                    'error' => 'Tarea no encontrada'
+                ], 404);
+            }
+
+            $tarea->delete();
+
+            return response()->json([
+                'message' => 'Tarea eliminada exitosamente'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Error al eliminar la tarea'
+            ], 500);
+        }
     }
 }

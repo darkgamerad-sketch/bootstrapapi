@@ -208,6 +208,63 @@
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- ========== PAGINACIÓN AGREGADA ========== -->
+                            <div class="d-flex justify-content-between align-items-center mt-4">
+                                <!-- Información de paginación -->
+                                <div class="text-muted">
+                                    Mostrando {{ $tareas->firstItem() }} a {{ $tareas->lastItem() }} de {{ $tareas->total() }} tareas
+                                </div>
+
+                                <!-- Links de paginación -->
+                                <nav>
+                                    <ul class="pagination mb-0">
+                                        <!-- Botón Anterior -->
+                                        @if ($tareas->onFirstPage())
+                                            <li class="page-item disabled">
+                                                <span class="page-link">&laquo; Anterior</span>
+                                            </li>
+                                        @else
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ $tareas->previousPageUrl() }}">&laquo; Anterior</a>
+                                            </li>
+                                        @endif
+
+                                        <!-- Números de página -->
+                                        @php
+                                            // Mostrar máximo 5 páginas alrededor de la actual
+                                            $start = max(1, $tareas->currentPage() - 2);
+                                            $end = min($tareas->lastPage(), $start + 4);
+                                            $start = max(1, $end - 4);
+                                        @endphp
+
+                                        @for ($i = $start; $i <= $end; $i++)
+                                            @if ($i == $tareas->currentPage())
+                                                <li class="page-item active">
+                                                    <span class="page-link">{{ $i }}</span>
+                                                </li>
+                                            @else
+                                                <li class="page-item">
+                                                    <a class="page-link" href="{{ $tareas->url($i) }}">{{ $i }}</a>
+                                                </li>
+                                            @endif
+                                        @endfor
+
+                                        <!-- Botón Siguiente -->
+                                        @if ($tareas->hasMorePages())
+                                            <li class="page-item">
+                                                <a class="page-link" href="{{ $tareas->nextPageUrl() }}">Siguiente &raquo;</a>
+                                            </li>
+                                        @else
+                                            <li class="page-item disabled">
+                                                <span class="page-link">Siguiente &raquo;</span>
+                                            </li>
+                                        @endif
+                                    </ul>
+                                </nav>
+                            </div>
+                            <!-- ========== FIN PAGINACIÓN ========== -->
+
                         @else
                             <!-- Empty State -->
                             <div class="text-center py-4">

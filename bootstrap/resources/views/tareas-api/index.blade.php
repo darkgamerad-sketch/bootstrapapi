@@ -169,6 +169,16 @@
                                     </tbody>
                                 </table>
                             </div>
+
+                            <!-- PAGINACIÓN -->
+                            <div id="paginationContainer" class="d-flex justify-content-between align-items-center mt-3">
+                                <div id="paginationInfo" class="text-muted"></div>
+                                <nav>
+                                    <ul class="pagination mb-0" id="paginationLinks">
+                                        <!-- Los links de paginación se generarán aquí -->
+                                    </ul>
+                                </nav>
+                            </div>
                         </div>
 
                         <div id="emptyState" class="text-center py-4" style="display: none;">
@@ -299,6 +309,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/admin-lte/3.2.0/js/adminlte.min.js"></script>
 
 <script>
+// Variables globales para la paginación
+let currentPage = 1;
+let totalPages = 1;
+let perPage = 5;
+
 // CSRF Token para las peticiones API
 const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
 
@@ -326,8 +341,10 @@ function showAlert(message, type = 'success') {
     }, 5000);
 }
 
-// Cargar tareas desde la API
-async function loadTasks() {
+// Cargar tareas desde la API con paginación
+async function loadTasks(page = 1) {
+    currentPage = page;
+
     const loadingSpinner = document.getElementById('loadingSpinner');
     const tasksTableContainer = document.getElementById('tasksTableContainer');
     const emptyState = document.getElementById('emptyState');
@@ -338,13 +355,15 @@ async function loadTasks() {
     emptyState.style.display = 'none';
 
     try {
-        const response = await fetch('/api/tareas', {
+        const response = await fetch(`/api/tareas?page=${page}&per_page=${perPage}`, {
             headers: headers
         });
 
         if (!response.ok) throw new Error('Error al cargar tareas');
 
-        const tareas = await response.json();
+        const data = await response.json();
+        const tareas = data.data;
+
         tasksTableBody.innerHTML = '';
 
         if (tareas.length > 0) {
@@ -379,6 +398,8 @@ async function loadTasks() {
                 tasksTableBody.appendChild(row);
             });
 
+            // Actualizar información de paginación
+            updatePaginationInfo(data.pagination);
             tasksTableContainer.style.display = 'block';
         } else {
             emptyState.style.display = 'block';
@@ -388,6 +409,75 @@ async function loadTasks() {
     } finally {
         loadingSpinner.style.display = 'none';
     }
+}
+
+// Actualizar la información y controles de paginación
+function updatePaginationInfo(pagination) {
+    const paginationInfo = document.getElementById('paginationInfo');
+    const paginationLinks = document.getElementById('paginationLinks');
+
+    totalPages = pagination.last_page;
+
+    // Actualizar información de página
+    paginationInfo.innerHTML = `
+        Mostrando ${pagination.from} a ${pagination.to} de ${pagination.total} tareas
+    `;
+
+    // Generar links de paginación
+    let paginationHTML = '';
+
+    // Botón Anterior
+    if (pagination.current_page > 1) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="javascript:void(0)" onclick="loadTasks(${pagination.current_page - 1})">
+                    &laquo; Anterior
+                </a>
+            </li>
+        `;
+    } else {
+        paginationHTML += `
+            <li class="page-item disabled">
+                <span class="page-link">&laquo; Anterior</span>
+            </li>
+        `;
+    }
+
+    // Números de página
+    for (let i = 1; i <= pagination.last_page; i++) {
+        if (i === pagination.current_page) {
+            paginationHTML += `
+                <li class="page-item active">
+                    <span class="page-link">${i}</span>
+                </li>
+            `;
+        } else {
+            paginationHTML += `
+                <li class="page-item">
+                    <a class="page-link" href="javascript:void(0)" onclick="loadTasks(${i})">${i}</a>
+                </li>
+            `;
+        }
+    }
+
+    // Botón Siguiente
+    if (pagination.current_page < pagination.last_page) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="javascript:void(0)" onclick="loadTasks(${pagination.current_page + 1})">
+                    Siguiente &raquo;
+                </a>
+            </li>
+        `;
+    } else {
+        paginationHTML += `
+            <li class="page-item disabled">
+                <span class="page-link">Siguiente &raquo;</span>
+            </li>
+        `;
+    }
+
+    paginationLinks.innerHTML = paginationHTML;
 }
 
 // Crear nueva tarea
@@ -414,7 +504,7 @@ document.getElementById('createTaskForm').addEventListener('submit', async funct
         showAlert('Tarea creada exitosamente');
         $('#createTaskModal').modal('hide');
         this.reset();
-        loadTasks();
+        loadTasks(currentPage); // Recargar la página actual
     } catch (error) {
         showAlert('Error al crear la tarea: ' + error.message, 'danger');
     }
@@ -466,7 +556,7 @@ document.getElementById('editTaskForm').addEventListener('submit', async functio
 
         showAlert('Tarea actualizada exitosamente');
         $('#editTaskModal').modal('hide');
-        loadTasks();
+        loadTasks(currentPage); // Recargar la página actual
     } catch (error) {
         showAlert('Error al actualizar la tarea: ' + error.message, 'danger');
     }
@@ -485,7 +575,7 @@ async function deleteTask(id) {
         if (!response.ok) throw new Error('Error al eliminar tarea');
 
         showAlert('Tarea eliminada exitosamente');
-        loadTasks();
+        loadTasks(currentPage); // Recargar la página actual
     } catch (error) {
         showAlert('Error al eliminar la tarea: ' + error.message, 'danger');
     }
